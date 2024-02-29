@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Document</title>
+        <script src="./liveness/builder.js"></script>
+        <style>
+            #data-result {
+                font-family: 'Courier New', Courier, monospace;
+                white-space: pre-wrap;
+                background-color: #0002;
+                overflow: auto;
+            }
+        </style>
+    </head>
+    <body>
+        <button onclick="doLivenessVerification()">
+            Run Liveness Verification
+        </button>
+        <img id="image-result" src="" />
+        <div id="data-result"></div>
+        <script>
+            ((global) => {
+                global.LivenessSDK = new LivenessBuilder()
+                    .setCredential({
+                        clientId: 'YOUR_CLIENT_ID',
+                        secret: 'YOUR_SECRET',
+                    })
+                    .setInstruction(['look_left', 'look_right'], {
+                        commands: ['open_mouth'],
+                        seedLimit: 1,
+                    })
+                    .setProxyMiddleware({
+                        PassiveLiveness: {
+                            url: 'https://websdk-proxy.staging.internal.verihubs.com/liveness/face',
+                        },
+                        License: {
+                            url: 'http://websdk-proxy.staging.internal.verihubs.com/license/{license_id}/check',
+                        },
+                    })
+                    .setTimeout(60000)
+                    .setURL('./liveness')
+                    .setVirtualCameraLabel(['OBS', 'Virtual'])
+                    .build();
+
+                global.doLivenessVerification = function() {
+                    global.LivenessSDK.onStart();
+                };
+
+                global.addEventListener('message', function (message) {
+                    var data = message.data.data;
+                    var subject = message.data.subject;
+                    switch (subject) {
+                        case 'Verification.Verbose':
+                            console.log('[Verbose]', data);
+                            break;
+
+                        case 'Camera.NotAllowed':
+                        case 'Camera.NotFound':
+                        case 'Camera.PermissionDenied':
+                        case 'ScreenOrientation.NotAllowed':
+                        case 'Verification.Disrupted':
+                        case 'Verification.Timeout':
+                            console.log({ data, subject });
+                            alert(subject);
+                            global.LivenessSDK.onDestroy();
+                            break;
+
+                        case 'Verification.Success':
+                            setTimeout(function () {
+                                var imgElement =
+                                    document.getElementById('image-result');
+                                var dataElement =
+                                    document.getElementById('data-result');
+                                imgElement.src =
+                                    'data:image/png;base64,' + data.image.url;
+                                dataElement.innerText = JSON.stringify(
+                                    data,
+                                    undefined,
+                                    2
+                                );
+                                global.LivenessSDK.onDestroy();
+                            }, 1500);
+                            break;
+
+                        default:
+                            console.log({ data, subject });
+                            alert(subject);
+                            break;
+                    }
+                });
+            })(window);
+        </script>
+    </body>
+</html>
